@@ -15,8 +15,7 @@ macro(add_boost_impl basename filelist)
     add_library(Boost::${basename} ALIAS ${basename})
 endmacro()
 
-add_boost_impl(boostlibs seperate_compilation/libs.cpp)
+add_boost_impl(boostlibs ${CMAKE_CURRENT_SOURCE_DIR}/seperate_compilation/libs.cpp)
 target_compile_definitions(boostlibs PUBLIC BOOST_JSON_NO_LIB BOOST_ASIO_NO_LIB BOOST_ASIO_NO_LIB BOOST_CONTAINER_NO_LIB)
 # this is added for convinince to include the boost main function as a cmake target library.
 add_boost_impl(test_main seperate_compilation/boost_test_main.cpp)
-
