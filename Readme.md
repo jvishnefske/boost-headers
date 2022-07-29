@@ -15,7 +15,7 @@ Continous Integration platforms.
 Who should not use this repo?
 -----------------------------
 
-Most boost boost headers are header-only and will work from this repository. Since
+Most boost libraries are header-only and will work from this repository. Since
 the include/ header folder structure is not currently modified from the boost source release. It therefore conta are some libraries
 which require seperate compiliation of the source code which is not contained in this repository. If you need any 
 of these this repository likely will not be useful for you.
