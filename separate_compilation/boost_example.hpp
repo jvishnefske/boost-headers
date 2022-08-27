@@ -109,7 +109,8 @@
 #include <boost/signals2.hpp>
 #include <boost/smart_ptr.hpp>
 #include <boost/spirit/include/classic.hpp>
-#include <boost/stacktrace.hpp>
+// not working on macos
+//#include <boost/stacktrace.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/static_string.hpp>
 #include <boost/swap.hpp>
