@@ -42,17 +42,23 @@ def download_extract_boost(version, temp_dir: pathlib.Path):
     # Extract the archive. filter only the header folder.
     with tarfile.open(file_name, "r:bz2") as tar:
         logging.info(f"Extracting Boost archive...")
+
         try:
+
             def my_filter(info, path):
                 if alt_version + "/boost" in info.name:
-                    info.name = pathlib.Path(*pathlib.Path(info.name).parts[2:])
-                    print(f'{info} {path}')
+                    return info
                 return None
-            tar.extractall(dest, filter=my_filter)
+            tar.extractall(temp_dir, filter=my_filter)
         except Exception as e:
             logging.error(f"Failed to extract Boost archive: {e}")
             return False
 
+    src = temp_dir / f"boost_{alt_version}" / "boost"
+    if not src.exists():
+        logging.error(f'failed to find extracted folder {src}')
+    logging.info(f"moving from {src} to {dest}")
+    src.rename(dest)
     return True
 
 
