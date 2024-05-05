@@ -33,7 +33,14 @@
 #include <boost/interprocess/detail/mpl.hpp>
 #include <boost/container/detail/type_traits.hpp>  //alignment_of, aligned_storage
 #include <boost/assert.hpp>
+#include <boost/static_assert.hpp>
 #include <iosfwd>
+
+#if defined(BOOST_GCC) && (BOOST_GCC >= 40600)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 
 //!\file
 //!Describes a smart pointer that stores the offset between this pointer and
@@ -761,5 +768,9 @@ struct pointer_to_other
 #endif   //#ifndef BOOST_INTERPROCESS_DOXYGEN_INVOKED
 
 #include <boost/interprocess/detail/config_end.hpp>
+
+#if defined(BOOST_GCC) && (BOOST_GCC >= 40600)
+#pragma GCC diagnostic pop
+#endif
 
 #endif //#ifndef BOOST_INTERPROCESS_OFFSET_PTR_HPP

@@ -9,9 +9,6 @@
 
 #include <boost/system/error_code.hpp>
 #include <boost/system/system_error.hpp>
-
-#if (__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER >= 1900)
-# include <boost/system/result.hpp>
-#endif
+#include <boost/system/result.hpp>
 
 #endif // #ifndef BOOST_SYSTEM_HPP_INCLUDED

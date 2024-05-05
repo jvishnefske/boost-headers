@@ -29,9 +29,9 @@ namespace detail
 
 // _describe_members<T>
 
-template<class T> using _describe_public_members = decltype( boost_public_member_descriptor_fn( static_cast<T*>(0) ) );
-template<class T> using _describe_protected_members = decltype( boost_protected_member_descriptor_fn( static_cast<T*>(0) ) );
-template<class T> using _describe_private_members = decltype( boost_private_member_descriptor_fn( static_cast<T*>(0) ) );
+template<class T> using _describe_public_members = decltype( boost_public_member_descriptor_fn( static_cast<T**>(0) ) );
+template<class T> using _describe_protected_members = decltype( boost_protected_member_descriptor_fn( static_cast<T**>(0) ) );
+template<class T> using _describe_private_members = decltype( boost_private_member_descriptor_fn( static_cast<T**>(0) ) );
 
 template<class T> using _describe_members = mp11::mp_append<_describe_public_members<T>, _describe_protected_members<T>, _describe_private_members<T>>;
 
@@ -86,9 +86,11 @@ template<class T, unsigned Bm> struct update_modifiers
     };
 };
 
+#ifndef __cpp_inline_variables
 template<class T, unsigned Bm> template<class D> constexpr decltype(D::pointer) update_modifiers<T, Bm>::fn<D>::pointer;
 template<class T, unsigned Bm> template<class D> constexpr decltype(D::name) update_modifiers<T, Bm>::fn<D>::name;
 template<class T, unsigned Bm> template<class D> constexpr unsigned update_modifiers<T, Bm>::fn<D>::modifiers;
+#endif
 
 template<class D> struct gather_virtual_bases_impl;
 template<class D> using gather_virtual_bases = typename gather_virtual_bases_impl<D>::type;

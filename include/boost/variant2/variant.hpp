@@ -15,17 +15,17 @@
 
 #include <boost/mp11.hpp>
 #include <boost/assert.hpp>
+#include <boost/assert/source_location.hpp>
 #include <boost/config.hpp>
-#include <boost/detail/workaround.hpp>
-#include <boost/cstdint.hpp>
+#include <boost/config/workaround.hpp>
 #include <cstddef>
 #include <type_traits>
 #include <exception>
-#include <initializer_list>
 #include <utility>
-#include <functional> // std::hash
-#include <cstdint>
+#include <typeindex> // std::hash
 #include <iosfwd>
+#include <cstdint>
+#include <cerrno>
 
 //
 
@@ -685,7 +685,20 @@ template<class T1, class... T> union variant_storage_impl<mp11::mp_true, T1, T..
 
     template<std::size_t I, class... A> BOOST_CXX14_CONSTEXPR void emplace_impl( mp11::mp_true, mp11::mp_size_t<I>, A&&... a )
     {
+#if defined(BOOST_GCC) && (__GNUC__ >= 7)
+# pragma GCC diagnostic push
+// False positive in at least GCC 7 and GCC 10 ASAN triggered by monostate (via result<void>)
+# pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#if __GNUC__ >= 12
+// False positive in at least GCC 12 and GCC 13 ASAN and -Og triggered by monostate (via result<void>)
+# pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
+#endif
         *this = variant_storage_impl( mp11::mp_size_t<I>(), std::forward<A>(a)... );
+
+#if defined(BOOST_GCC) && (__GNUC__ >= 7)
+# pragma GCC diagnostic pop
+#endif
     }
 
     template<std::size_t I, class... A> BOOST_CXX14_CONSTEXPR void emplace( mp11::mp_size_t<I>, A&&... a )
@@ -842,14 +855,14 @@ struct none {};
 // trivially destructible, single buffered
 template<class... T> struct variant_base_impl<true, true, T...>
 {
-    unsigned ix_;
     variant_storage<none, T...> st_;
+    unsigned ix_;
 
-    constexpr variant_base_impl(): ix_( 0 ), st_( mp11::mp_size_t<0>() )
+    constexpr variant_base_impl(): st_( mp11::mp_size_t<0>() ), ix_( 0 )
     {
     }
 
-    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): ix_( I::value + 1 ), st_( mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... )
+    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): st_( mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... ), ix_( I::value + 1 )
     {
     }
 
@@ -908,19 +921,24 @@ template<class... T> struct variant_base_impl<true, true, T...>
 
         this->emplace_impl<J, U>( std::is_nothrow_constructible<U, A&&...>(), std::forward<A>(a)... );
     }
+
+    static constexpr bool uses_double_storage() noexcept
+    {
+        return false;
+    }
 };
 
 // trivially destructible, double buffered
 template<class... T> struct variant_base_impl<true, false, T...>
 {
-    unsigned ix_;
     variant_storage<none, T...> st_[ 2 ];
+    unsigned ix_;
 
-    constexpr variant_base_impl(): ix_( 0 ), st_{ { mp11::mp_size_t<0>() }, { mp11::mp_size_t<0>() } }
+    constexpr variant_base_impl(): st_{ { mp11::mp_size_t<0>() }, { mp11::mp_size_t<0>() } }, ix_( 0 )
     {
     }
 
-    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): ix_( ( I::value + 1 ) * 2 ), st_{ { mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... }, { mp11::mp_size_t<0>() } }
+    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): st_{ { mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... }, { mp11::mp_size_t<0>() } }, ix_( ( I::value + 1 ) * 2 )
     {
     }
 
@@ -966,19 +984,24 @@ template<class... T> struct variant_base_impl<true, false, T...>
 
         ix_ = J * 2 + i2;
     }
+
+    static constexpr bool uses_double_storage() noexcept
+    {
+        return true;
+    }
 };
 
 // not trivially destructible, single buffered
 template<class... T> struct variant_base_impl<false, true, T...>
 {
-    unsigned ix_;
     variant_storage<none, T...> st_;
+    unsigned ix_;
 
-    constexpr variant_base_impl(): ix_( 0 ), st_( mp11::mp_size_t<0>() )
+    constexpr variant_base_impl(): st_( mp11::mp_size_t<0>() ), ix_( 0 )
     {
     }
 
-    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): ix_( I::value + 1 ), st_( mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... )
+    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): st_( mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... ), ix_( I::value + 1 )
     {
     }
 
@@ -1056,24 +1079,28 @@ template<class... T> struct variant_base_impl<false, true, T...>
         st_.emplace( mp11::mp_size_t<J>(), std::move(tmp) );
         ix_ = J;
     }
+
+    static constexpr bool uses_double_storage() noexcept
+    {
+        return false;
+    }
 };
 
 // not trivially destructible, double buffered
 template<class... T> struct variant_base_impl<false, false, T...>
 {
-    unsigned ix_;
-
 #if defined(__GNUC__) && __GNUC__ < 11 && !defined(__clang__) && !defined(__INTEL_COMPILER)
 
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=63707 :-(
 
     variant_storage<none, T...> st1_, st2_;
+    unsigned ix_;
 
-    constexpr variant_base_impl(): ix_( 0 ), st1_( mp11::mp_size_t<0>() ), st2_( mp11::mp_size_t<0>() )
+    constexpr variant_base_impl(): st1_( mp11::mp_size_t<0>() ), st2_( mp11::mp_size_t<0>() ), ix_( 0 )
     {
     }
 
-    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): ix_( ( I::value + 1 ) * 2 ), st1_( mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... ), st2_( mp11::mp_size_t<0>() )
+    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): st1_( mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... ), st2_( mp11::mp_size_t<0>() ), ix_( ( I::value + 1 ) * 2 )
     {
     }
 
@@ -1090,12 +1117,13 @@ template<class... T> struct variant_base_impl<false, false, T...>
 #else
 
     variant_storage<none, T...> st_[ 2 ];
+    unsigned ix_;
 
-    constexpr variant_base_impl(): ix_( 0 ), st_{ { mp11::mp_size_t<0>() }, { mp11::mp_size_t<0>() } }
+    constexpr variant_base_impl(): st_{ { mp11::mp_size_t<0>() }, { mp11::mp_size_t<0>() } }, ix_( 0 )
     {
     }
 
-    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): ix_( ( I::value + 1 ) * 2 ), st_{ { mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... }, { mp11::mp_size_t<0>() } }
+    template<class I, class... A> constexpr explicit variant_base_impl( I, A&&... a ): st_{ { mp11::mp_size_t<I::value + 1>(), std::forward<A>(a)... }, { mp11::mp_size_t<0>() } }, ix_( ( I::value + 1 ) * 2 )
     {
     }
 
@@ -1180,6 +1208,11 @@ template<class... T> struct variant_base_impl<false, false, T...>
         _destroy();
 
         ix_ = J * 2 + i2;
+    }
+
+    static constexpr bool uses_double_storage() noexcept
+    {
+        return true;
     }
 };
 
@@ -1601,7 +1634,17 @@ public:
     template<class U,
         class Ud = typename std::decay<U>::type,
         class E1 = typename std::enable_if< !std::is_same<Ud, variant>::value && !std::is_base_of<variant, Ud>::value && !detail::is_in_place_index<Ud>::value && !detail::is_in_place_type<Ud>::value >::type,
+
+#if BOOST_WORKAROUND(BOOST_MSVC, < 1940)
+
+        class V = mp11::mp_apply_q< mp11::mp_bind_front<detail::resolve_overload_type, U&&>, variant >,
+
+#else
+
         class V = detail::resolve_overload_type<U&&, T...>,
+
+#endif
+
         class E2 = typename std::enable_if<std::is_constructible<V, U&&>::value>::type
         >
     constexpr variant( U&& u )
@@ -1690,6 +1733,8 @@ public:
     }
 
     using variant_base::index;
+
+    using variant_base::uses_double_storage;
 
     // swap
 
@@ -2253,9 +2298,26 @@ template<class Ch, class Tr, class... T> struct ostream_insert_L
     }
 };
 
+template<class Os, class T, class E = void> struct is_output_streamable: std::false_type
+{
+};
+
+template<class Os, class T> struct is_output_streamable<Os, T, decltype( std::declval<Os&>() << std::declval<T const&>(), (void)0 )>: std::true_type
+{
+};
+
 } // namespace detail
 
-template<class Ch, class Tr, class T1, class... T> std::basic_ostream<Ch, Tr>& operator<<( std::basic_ostream<Ch, Tr>& os, variant<T1, T...> const& v )
+template<class Ch, class Tr>
+std::basic_ostream<Ch, Tr>& operator<<( std::basic_ostream<Ch, Tr>& os, monostate const& )
+{
+    os << "monostate";
+    return os;
+}
+
+template<class Ch, class Tr, class T1, class... T,
+    class E = typename std::enable_if< mp11::mp_all< detail::is_output_streamable<std::basic_ostream<Ch, Tr>, T>... >::value >::type >
+std::basic_ostream<Ch, Tr>& operator<<( std::basic_ostream<Ch, Tr>& os, variant<T1, T...> const& v )
 {
     return mp11::mp_with_index<1 + sizeof...(T)>( v.index(),
         detail::ostream_insert_L<Ch, Tr, T1, T...>{ os, v } );
@@ -2268,8 +2330,8 @@ namespace detail
 
 inline std::size_t hash_value_impl_( mp11::mp_true, std::size_t index, std::size_t value )
 {
-    boost::ulong_long_type hv = ( boost::ulong_long_type( 0xCBF29CE4 ) << 32 ) + 0x84222325;
-    boost::ulong_long_type const prime = ( boost::ulong_long_type( 0x00000100 ) << 32 ) + 0x000001B3;
+    unsigned long long hv = 0xCBF29CE484222325ull;
+    unsigned long long const prime = 0x100000001B3ull;
 
     hv ^= index;
     hv *= prime;
@@ -2374,6 +2436,109 @@ template<> struct hash< ::boost::variant2::monostate >
 };
 
 } // namespace std
+
+// JSON support
+
+namespace boost
+{
+namespace json
+{
+
+class value;
+
+struct value_from_tag;
+
+template<class T>
+void value_from( T&& t, value& jv );
+
+template<class T>
+struct try_value_to_tag;
+
+template<class T1, class T2>
+struct result_for;
+
+template<class T>
+typename result_for<T, value>::type
+try_value_to( value const & jv );
+
+template<class T>
+typename result_for<T, value>::type
+result_from_errno( int e, boost::source_location const* loc ) noexcept;
+
+template<class T> struct is_null_like;
+
+template<> struct is_null_like<variant2::monostate>: std::true_type {};
+
+} // namespace json
+
+namespace variant2
+{
+
+namespace detail
+{
+
+struct tag_invoke_L1
+{
+    boost::json::value& v;
+
+#if defined(BOOST_MSVC) && BOOST_MSVC / 10 == 191
+    // msvc-14.1 with /permissive- needs this
+    explicit tag_invoke_L1( boost::json::value& v_ ): v( v_ ) {}
+#endif
+
+    template<class T> void operator()( T const& t ) const
+    {
+        boost::json::value_from( t, v );
+    }
+};
+
+} // namespace detail
+
+template<class... T>
+    void tag_invoke( boost::json::value_from_tag const&, boost::json::value& v, variant<T...> const & w )
+{
+    visit( detail::tag_invoke_L1{ v }, w );
+}
+
+namespace detail
+{
+
+template<class V> struct tag_invoke_L2
+{
+    boost::json::value const& v;
+    typename boost::json::result_for<V, boost::json::value>::type& r;
+
+    template<class I> void operator()( I /*i*/ ) const
+    {
+        if( !r )
+        {
+            using Ti = mp11::mp_at_c<V, I::value>;
+            auto r2 = boost::json::try_value_to<Ti>( v );
+
+            if( r2 )
+            {
+                r.emplace( in_place_index_t<I::value>{}, std::move( *r2 ) );
+            }
+        }
+    }
+};
+
+} // namespace detail
+
+template<class... T>
+    typename boost::json::result_for<variant<T...>, boost::json::value>::type
+    tag_invoke( boost::json::try_value_to_tag<variant<T...>> const&, boost::json::value const& v )
+{
+    static constexpr boost::source_location loc = BOOST_CURRENT_LOCATION;
+    auto r = boost::json::result_from_errno< variant<T...> >( EINVAL, &loc );
+
+    mp11::mp_for_each<mp11::mp_iota_c<sizeof...(T)>>( detail::tag_invoke_L2< variant<T...> >{ v, r } );
+
+    return r;
+}
+
+} // namespace variant2
+} // namespace boost
 
 #undef BOOST_VARIANT2_CX14_ASSERT
 

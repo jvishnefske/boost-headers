@@ -1,6 +1,6 @@
 /doc/html/
 /doc/latex/
-
+temp/
 ### C++ template
 # Prerequisites
 *.d

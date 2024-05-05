@@ -34,16 +34,6 @@ With these techniques, the code could be simplified.
 #define BOOST_MATH_ENDIAN_BIG_BYTE BOOST_ENDIAN_BIG_BYTE
 #define BOOST_MATH_ENDIAN_LITTLE_BYTE BOOST_ENDIAN_LITTLE_BYTE
 
-#elif (__cplusplus >= 202002L || _MSVC_LANG >= 202002L)
-
-#if __has_include(<bit>)
-#include <bit>
-#define BOOST_MATH_ENDIAN_BIG_BYTE (std::endian::native == std::endian::big)
-#define BOOST_MATH_ENDIAN_LITTLE_BYTE (std::endian::native == std::endian::little)
-#else
-#error Missing <bit> header. Please disable standalone mode, and file an issue at https://github.com/boostorg/math
-#endif
-
 #elif defined(_WIN32)
 
 #define BOOST_MATH_ENDIAN_BIG_BYTE 0
@@ -260,11 +250,11 @@ template<> struct fp_traits_non_native<double, double_precision>
 {
     typedef ieee_copy_all_bits_tag method;
 
-    static constexpr uint64_t sign     = ((uint64_t)0x80000000u) << 32;
-    static constexpr uint64_t exponent = ((uint64_t)0x7ff00000) << 32;
+    static constexpr uint64_t sign     = static_cast<uint64_t>(0x80000000u) << 32;
+    static constexpr uint64_t exponent = static_cast<uint64_t>(0x7ff00000) << 32;
     static constexpr uint64_t flag     = 0;
     static constexpr uint64_t significand
-        = (((uint64_t)0x000fffff) << 32) + ((uint64_t)0xffffffffu);
+        = (static_cast<uint64_t>(0x000fffff) << 32) + static_cast<uint64_t>(0xffffffffu);
 
     typedef uint64_t bits;
     static void get_bits(double x, uint64_t& a) { std::memcpy(&a, &x, 8); }
@@ -313,11 +303,11 @@ template<> struct fp_traits_non_native<long double, double_precision>
 {
     typedef ieee_copy_all_bits_tag method;
 
-    static const uint64_t sign     = (uint64_t)0x80000000u << 32;
-    static const uint64_t exponent = (uint64_t)0x7ff00000 << 32;
+    static const uint64_t sign     = static_cast<uint64_t>(0x80000000u) << 32;
+    static const uint64_t exponent = static_cast<uint64_t>(0x7ff00000) << 32;
     static const uint64_t flag     = 0;
     static const uint64_t significand
-        = ((uint64_t)0x000fffff << 32) + (uint64_t)0xffffffffu;
+        = (static_cast<uint64_t>(0x000fffff) << 32) + static_cast<uint64_t>(0xffffffffu);
 
     typedef uint64_t bits;
     static void get_bits(long double x, uint64_t& a) { std::memcpy(&a, &x, 8); }
@@ -493,7 +483,7 @@ private:
 // size_to_precision is a type switch for converting a C++ floating point type
 // to the corresponding precision type.
 
-template<int n, bool fp> struct size_to_precision
+template<size_t n, bool fp> struct size_to_precision
 {
    typedef unknown_precision type;
 };
